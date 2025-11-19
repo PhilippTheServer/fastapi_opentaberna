@@ -1,0 +1,20 @@
+services:
+  fastapi:
+    build: ./src
+    expose:
+      - "8000"
+    networks:
+      frontproxy_fnet:
+        ipv4_address: 172.20.20.90
+      backend:
+    restart: unless-stopped
+    container_name: fastapi
+
+networks:
+  frontproxy_fnet:
+    external: true
+  backend:
+    name: fastapi_backend
+    driver: bridge
+    driver_opts:
+      com.docker.network.enable_ipv6: "false"
