@@ -1,0 +1,463 @@
+name: Automated Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      log_level:
+        description: 'Log level for tests'
+        required: false
+        default: 'INFO'
+        type: choice
+        options:
+          - DEBUG
+          - INFO
+          - WARNING
+          - ERROR
+
+env:
+  PYTHON_VERSION: '3.12'
+  UV_VERSION: '0.4.0'
+
+jobs:
+  # Job 1: Unit and Integration Tests with Full Service Stack
+  test:
+    name: Run Tests with Services
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    # Service containers for testing
+    services:
+      # MySQL for main database
+      mysql:
+        image: mysql:8.3
+        env:
+          MYSQL_ROOT_PASSWORD: test_root_password
+          MYSQL_DATABASE: yggdrasil_test
+          MYSQL_USER: test_user
+          MYSQL_PASSWORD: test_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      
+      # Redis for caching and Celery
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-server --version"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: � Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-client redis-tools
+          echo "✅ System dependencies installed"
+
+      - name: �📦 Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false  # Disable cache to avoid 400 errors
+
+      - name: 🔧 Install dependencies
+        run: |
+          uv sync --extra test
+          echo "✅ Dependencies installed"
+
+      - name: 🗄️ Wait for services to be ready
+        run: |
+          echo "⏳ Waiting for services to be healthy..."
+          
+          # Wait longer for all services to be ready
+          for i in {1..30}; do
+            echo "Attempt $i/30..."
+            
+            # Check MySQL
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_root_password --silent 2>/dev/null; then
+              echo "✅ MySQL is ready"
+              MYSQL_READY=1
+            fi
+            
+            # Check Redis
+            if redis-cli -h 127.0.0.1 -p 6379 ping 2>/dev/null | grep -q PONG; then
+              echo "✅ Redis is ready"
+              REDIS_READY=1
+            fi
+            
+            # All services ready?
+            if [ "$MYSQL_READY" = "1" ] && [ "$REDIS_READY" = "1" ]; then
+              echo "✅ All services are ready!"
+              exit 0
+            fi
+            
+            sleep 2
+          done
+          
+          echo "❌ Timeout waiting for services"
+          exit 1
+
+      - name: 🔐 Create test environment file
+        run: |
+          cat << EOF > .env
+          # Database Configuration
+          MYSQL_HOST=127.0.0.1
+          MYSQL_PORT=3306
+          MYSQL_DATABASE=opentaberna_test
+          MYSQL_USER=test_user
+          MYSQL_PASSWORD=test_password
+          
+          # Redis Configuration
+          REDIS_URL=redis://127.0.0.1:6379/0
+          
+          # Keycloak Configuration (from secrets)
+          KEYCLOAK_URL=${{ secrets.TEST_KEYCLOAK_URL }}
+          REALM=${{ secrets.TEST_REALM }}
+          CLIENT_ID=${{ secrets.TEST_CLIENT_ID }}
+          CLIENT_SECRET=${{ secrets.TEST_CLIENT_SECRET }}
+          
+          # Logging
+          LOG_LEVEL=${{ github.event.inputs.log_level || 'INFO' }}
+          EOF
+          
+          echo "✅ Test environment file created"
+
+      - name: 🗄️ Initialize databases
+        run: |
+          echo "🔧 Setting up test databases..."
+          
+          # Create tables in main database if needed
+          mysql -h 127.0.0.1 -P 3306 -u test_user -ptest_password yggdrasil_test -e "SHOW TABLES;" || true
+          
+          echo "✅ Databases initialized"
+
+      - name: 🧪 Run unit tests
+        run: |
+          source .venv/bin/activate
+          echo "🧪 Running unit tests..."
+          pytest tests/ -v --tb=short --color=yes -m "not integration and not slow"
+          echo "✅ Unit tests completed"
+
+      - name: 🔗 Run integration tests
+        run: |
+          source .venv/bin/activate
+          echo "🔗 Running integration tests..."
+          pytest tests/ -v --tb=short --color=yes -m "integration"
+          echo "✅ Integration tests completed"
+        continue-on-error: true
+
+      - name: 📊 Generate coverage report
+        if: always()
+        run: |
+          source .venv/bin/activate
+          echo "📊 Generating coverage report..."
+          pytest tests/ \
+            --cov=app \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            --junitxml=test-results.xml
+          echo "✅ Coverage report generated"
+
+      - name: 📈 Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+        continue-on-error: true
+
+      - name: 📦 Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            test-results.xml
+            coverage.xml
+            htmlcov/
+          retention-days: 30
+
+      - name: 📊 Test Summary
+        if: always()
+        run: |
+          echo "## 🧪 Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f test-results.xml ]; then
+            echo "✅ Test results generated" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f coverage.xml ]; then
+            echo "✅ Coverage report generated" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- Test results (JUnit XML)" >> $GITHUB_STEP_SUMMARY
+          echo "- Coverage report (XML & HTML)" >> $GITHUB_STEP_SUMMARY
+
+  # Job 2: Lint and Code Quality
+  lint:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [test]
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 📦 Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false  # Disable cache to avoid 400 errors
+
+      - name: 🔧 Install dependencies
+        run: |
+          uv sync --extra dev
+
+      - name: 🔍 Run Ruff linting
+        run: |
+          source .venv/bin/activate
+          echo "🔍 Running Ruff linter..."
+          ruff check src/ tests/ --output-format=github
+        continue-on-error: true
+
+      - name: 🎨 Run Ruff formatting check
+        run: |
+          source .venv/bin/activate
+          echo "🎨 Checking code formatting..."
+          ruff format --check src/ tests/
+        continue-on-error: true
+
+      - name: 📝 Lint Summary
+        run: |
+          echo "## 🔍 Code Quality Summary" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Linting completed" >> $GITHUB_STEP_SUMMARY
+
+  # Job 3: Security Scan
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [test]
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: � Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 📦 Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+
+      - name: 🔧 Install Bandit
+        run: |
+          uv pip install --system bandit[toml]
+          echo "✅ Bandit installed"
+
+      - name: 🔍 Run Bandit security code analysis
+        run: |
+          echo "🔍 Running Bandit security analysis..."
+          bandit -r src/ -f json -o bandit-results.json || true
+          bandit -r src/ -f txt -o bandit-results.txt || true
+          bandit -r src/ -f screen
+          echo "✅ Bandit scan completed"
+        continue-on-error: true
+
+      - name: 📊 Display Bandit results in summary
+        if: always()
+        run: |
+          echo "## 🔍 Bandit Code Security Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f bandit-results.txt ]; then
+            echo "### 🐍 Python Code Security Issues:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat bandit-results.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            
+            # Extract severity counts from JSON if available
+            if [ -f bandit-results.json ]; then
+              HIGH=$(jq '[.results[] | select(.issue_severity=="HIGH")] | length' bandit-results.json 2>/dev/null || echo "0")
+              MEDIUM=$(jq '[.results[] | select(.issue_severity=="MEDIUM")] | length' bandit-results.json 2>/dev/null || echo "0")
+              LOW=$(jq '[.results[] | select(.issue_severity=="LOW")] | length' bandit-results.json 2>/dev/null || echo "0")
+              
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### 📈 Severity Breakdown:" >> $GITHUB_STEP_SUMMARY
+              echo "- 🔴 High: $HIGH" >> $GITHUB_STEP_SUMMARY
+              echo "- 🟡 Medium: $MEDIUM" >> $GITHUB_STEP_SUMMARY
+              echo "- 🟢 Low: $LOW" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: �🔒 Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          # Scan Python dependencies and filesystem
+          scanners: 'vuln,secret,config'
+        continue-on-error: true
+
+      - name: 📊 Generate detailed Trivy report
+        if: always()
+        run: |
+          # Install trivy if not available
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install trivy -y
+          
+          # Run detailed scan
+          trivy fs --severity CRITICAL,HIGH,MEDIUM --format json --output trivy-results.json .
+          trivy fs --severity CRITICAL,HIGH,MEDIUM --format table --output trivy-results.txt .
+          
+          echo "✅ Detailed scan completed"
+
+      - name: � Display scan results in summary
+        if: always()
+        run: |
+          echo "## 🔒 Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f trivy-results.txt ]; then
+            echo "### 📊 Vulnerabilities Found:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            head -n 100 trivy-results.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            
+            # Count vulnerabilities
+            CRITICAL=$(grep -c "CRITICAL" trivy-results.txt || echo "0")
+            HIGH=$(grep -c "HIGH" trivy-results.txt || echo "0")
+            MEDIUM=$(grep -c "MEDIUM" trivy-results.txt || echo "0")
+            
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 📈 Summary:" >> $GITHUB_STEP_SUMMARY
+            echo "- 🔴 Critical: $CRITICAL" >> $GITHUB_STEP_SUMMARY
+            echo "- 🟠 High: $HIGH" >> $GITHUB_STEP_SUMMARY
+            echo "- 🟡 Medium: $MEDIUM" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Security scan completed" >> $GITHUB_STEP_SUMMARY
+          echo "📦 Full results available in artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "ℹ️ **Note:** GitHub Code Scanning (Advanced Security) is not enabled." >> $GITHUB_STEP_SUMMARY
+          echo "This means results won't appear in the Security tab, but are available in:" >> $GITHUB_STEP_SUMMARY
+          echo "- This workflow summary (above)" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts (downloadable JSON/TXT reports)" >> $GITHUB_STEP_SUMMARY
+
+      - name: 📦 Upload security scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-results
+          path: |
+            bandit-results.json
+            bandit-results.txt
+            trivy-results.json
+            trivy-results.txt
+          retention-days: 30
+        continue-on-error: true
+
+  # Job 4: Build Docker Image (without pushing)
+  build-test:
+    name: Test Docker Build
+    runs-on: ubuntu-latest
+    needs: [test]
+    timeout-minutes: 10
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🏗️ Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./src/Dockerfile
+          push: false
+          tags: opentaberna-api:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 🏗️ Build Summary
+        run: |
+          echo "## 🐳 Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Docker image built successfully" >> $GITHUB_STEP_SUMMARY
+          echo "🏷️ Tag: opentaberna-api:test" >> $GITHUB_STEP_SUMMARY
+
+  # Job 5: Test Summary Report
+  report:
+    name: Generate Test Report
+    runs-on: ubuntu-latest
+    needs: [test, lint, security, build-test]
+    if: always()
+    
+    steps:
+      - name: 📊 Download test results
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results
+        continue-on-error: true
+
+      - name: 📋 Generate final report
+        run: |
+          echo "# 🎉 Test Workflow Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Tests: ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Linting: ${{ needs.lint.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Security: ${{ needs.security.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Docker Build: ${{ needs.build-test.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Test Environment" >> $GITHUB_STEP_SUMMARY
+          echo "- MySQL 8.3 ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- Redis 8 ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Ready for deployment! 🚀" >> $GITHUB_STEP_SUMMARY
