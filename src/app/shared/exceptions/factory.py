@@ -4,7 +4,7 @@ Factory functions and helpers for exception handling.
 Provides convenient helper functions for common exception scenarios.
 """
 
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, Optional
 from .errors import (
     NotFoundError,
     ValidationError,
@@ -30,15 +30,15 @@ def entity_not_found(
 ) -> NotFoundError:
     """
     Create NotFoundError for a specific entity.
-    
+
     Args:
         entity_type: Type of entity (e.g., "User", "Item", "Order")
         entity_id: ID of the entity that was not found
         message: Optional custom message
-        
+
     Returns:
         NotFoundError with appropriate context
-        
+
     Example:
         >>> raise entity_not_found("User", user_id=123)
     """
@@ -61,14 +61,14 @@ def entity_not_found(
 def missing_field(field_name: str, message: Optional[str] = None) -> ValidationError:
     """
     Create ValidationError for a missing required field.
-    
+
     Args:
         field_name: Name of the missing field
         message: Optional custom message
-        
+
     Returns:
         ValidationError with appropriate context
-        
+
     Example:
         >>> raise missing_field("email")
     """
@@ -87,19 +87,21 @@ def invalid_format(
 ) -> ValidationError:
     """
     Create ValidationError for invalid field format.
-    
+
     Args:
         field_name: Name of the field with invalid format
         expected_format: Description of expected format
         message: Optional custom message
-        
+
     Returns:
         ValidationError with appropriate context
-        
+
     Example:
         >>> raise invalid_format("email", "valid email address")
     """
-    default_message = f"Field '{field_name}' has invalid format. Expected: {expected_format}"
+    default_message = (
+        f"Field '{field_name}' has invalid format. Expected: {expected_format}"
+    )
     return ValidationError(
         message=message or default_message,
         error_code=ErrorCode.INVALID_FORMAT,
@@ -118,16 +120,16 @@ def duplicate_entry(
 ) -> ValidationError:
     """
     Create ValidationError for duplicate entry.
-    
+
     Args:
         entity_type: Type of entity (e.g., "User", "Item")
         field_name: Field that has duplicate value
         field_value: The duplicate value
         message: Optional custom message
-        
+
     Returns:
         ValidationError with appropriate context
-        
+
     Example:
         >>> raise duplicate_entry("User", "email", "test@example.com")
     """
@@ -151,11 +153,11 @@ def constraint_violation(
     """Create ValidationError for constraint violation."""
     details_str = f" - {details}" if details else ""
     default_message = f"Constraint violation: {constraint}{details_str}"
-    
+
     context: Dict[str, Any] = {"constraint": constraint}
     if details:
         context["details"] = details
-    
+
     return ValidationError(
         message=message or default_message,
         error_code=ErrorCode.CONSTRAINT_VIOLATION,
@@ -173,7 +175,11 @@ def database_connection_error(
     original_exception: Optional[Exception] = None,
 ) -> DatabaseError:
     """Create DatabaseError for connection failures."""
-    message = f"Database connection failed: {details}" if details else "Database connection failed"
+    message = (
+        f"Database connection failed: {details}"
+        if details
+        else "Database connection failed"
+    )
     return DatabaseError(
         message=message,
         error_code=ErrorCode.DATABASE_CONNECTION_ERROR,
@@ -187,7 +193,11 @@ def database_integrity_error(
     original_exception: Optional[Exception] = None,
 ) -> DatabaseError:
     """Create DatabaseError for integrity constraint violations."""
-    message = f"Database integrity error: {details}" if details else "Database integrity error"
+    message = (
+        f"Database integrity error: {details}"
+        if details
+        else "Database integrity error"
+    )
     return DatabaseError(
         message=message,
         error_code=ErrorCode.DATABASE_INTEGRITY_ERROR,
@@ -237,8 +247,12 @@ def access_denied(
 ) -> AuthorizationError:
     """Create AuthorizationError for access denial."""
     if not message:
-        message = f"Access denied: cannot {action} {resource}" if (resource and action) else "Access denied"
-    
+        message = (
+            f"Access denied: cannot {action} {resource}"
+            if (resource and action)
+            else "Access denied"
+        )
+
     context = {k: v for k, v in {"resource": resource, "action": action}.items() if v}
     return AuthorizationError(
         message=message,
@@ -252,7 +266,11 @@ def insufficient_permissions(
     message: Optional[str] = None,
 ) -> AuthorizationError:
     """Create AuthorizationError for insufficient permissions."""
-    default_message = f"Insufficient permissions: {required_role} role required" if required_role else "Insufficient permissions"
+    default_message = (
+        f"Insufficient permissions: {required_role} role required"
+        if required_role
+        else "Insufficient permissions"
+    )
     return AuthorizationError(
         message=message or default_message,
         error_code=ErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -272,15 +290,15 @@ def invalid_state(
 ) -> BusinessRuleError:
     """
     Create BusinessRuleError for invalid state.
-    
+
     Args:
         current_state: Current state
         expected_state: Expected state (optional)
         message: Optional custom message
-        
+
     Returns:
         BusinessRuleError with appropriate context
-        
+
     Example:
         >>> raise invalid_state("cancelled", "active")
     """
@@ -288,11 +306,11 @@ def invalid_state(
         message = f"Invalid state: {current_state}"
         if expected_state:
             message += f". Expected: {expected_state}"
-    
+
     context: Dict[str, str] = {"current_state": current_state}
     if expected_state:
         context["expected_state"] = expected_state
-    
+
     return BusinessRuleError(
         message=message,
         error_code=ErrorCode.INVALID_STATE,
@@ -308,11 +326,11 @@ def operation_not_allowed(
     """Create BusinessRuleError for disallowed operation."""
     reason_str = f" - {reason}" if reason else ""
     default_message = f"Operation not allowed: {operation}{reason_str}"
-    
+
     context: Dict[str, str] = {"operation": operation}
     if reason:
         context["reason"] = reason
-    
+
     return BusinessRuleError(
         message=message or default_message,
         error_code=ErrorCode.OPERATION_NOT_ALLOWED,
@@ -332,15 +350,15 @@ def external_service_unavailable(
 ) -> ExternalServiceError:
     """
     Create ExternalServiceError for service unavailability.
-    
+
     Args:
         service_name: Name of the external service
         message: Optional custom message
         original_exception: Original exception
-        
+
     Returns:
         ExternalServiceError with appropriate context
-        
+
     Example:
         >>> raise external_service_unavailable("PaymentAPI")
     """
@@ -361,11 +379,11 @@ def external_service_timeout(
     """Create ExternalServiceError for service timeout."""
     timeout_str = f" (timeout: {timeout_seconds}s)" if timeout_seconds else ""
     default_message = f"External service timeout: {service_name}{timeout_str}"
-    
+
     context = {"service_name": service_name}
     if timeout_seconds:
         context["timeout_seconds"] = timeout_seconds
-    
+
     return ExternalServiceError(
         message=message or default_message,
         error_code=ErrorCode.EXTERNAL_SERVICE_TIMEOUT,
@@ -386,11 +404,11 @@ def configuration_error(
     """Create InternalError for configuration issues."""
     details_str = f" - {details}" if details else ""
     default_message = f"Configuration error: {config_key}{details_str}"
-    
+
     context: Dict[str, str] = {"config_key": config_key}
     if details:
         context["details"] = details
-    
+
     return InternalError(
         message=message or default_message,
         error_code=ErrorCode.CONFIGURATION_ERROR,

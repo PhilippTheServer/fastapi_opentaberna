@@ -98,7 +98,7 @@ def test_exception_logging(capsys):
     logger = get_logger("test.exception")
 
     try:
-        result = 1 / 0
+        1 / 0
     except Exception:
         logger.exception("Division by zero error", operation="divide")
 
@@ -143,7 +143,7 @@ def test_clear_loggers():
 
     clear_loggers()
 
-    logger3 = get_logger("test.clear1")
+    get_logger("test.clear1")
     # Can't test identity after clear since fixture also clears
 
 

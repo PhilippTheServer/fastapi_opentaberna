@@ -37,10 +37,10 @@ def get_user_by_id(user_id: int):
     """Get user by ID - demonstrates NotFoundError."""
     # Simulate database query
     user = None  # db.query(User).filter(User.id == user_id).first()
-    
+
     if not user:
         raise entity_not_found("User", user_id)
-    
+
     return user
 
 
@@ -49,26 +49,25 @@ def create_user(email: str, password: str, name: Optional[str] = None):
     # Validate required fields
     if not email:
         raise missing_field("email")
-    
+
     if not password:
         raise missing_field("password")
-    
+
     # Validate email format
     if "@" not in email:
         raise invalid_format("email", "valid email address")
-    
+
     # Check for duplicate email
     existing_user = None  # db.query(User).filter(User.email == email).first()
     if existing_user:
         raise duplicate_entry("User", "email", email)
-    
+
     # Validate password strength
     if len(password) < 8:
         raise constraint_violation(
-            "password_length",
-            "Password must be at least 8 characters"
+            "password_length", "Password must be at least 8 characters"
         )
-    
+
     # Create user...
     return {"id": 1, "email": email, "name": name}
 
@@ -86,8 +85,7 @@ def connect_to_database(host: str, port: int):
         raise ConnectionError("Connection refused")
     except ConnectionError as e:
         raise database_connection_error(
-            f"Failed to connect to {host}:{port}",
-            original_exception=e
+            f"Failed to connect to {host}:{port}", original_exception=e
         )
 
 
@@ -101,7 +99,7 @@ def execute_query(query: str):
         raise DatabaseError(
             "Query execution failed",
             context={"query": query[:100]},  # First 100 chars
-            original_exception=e
+            original_exception=e,
         )
 
 
@@ -114,20 +112,18 @@ def verify_token(token: str) -> dict:
     """Verify authentication token."""
     if not token:
         raise AuthenticationError(
-            "Authentication token required",
-            context={"header": "Authorization"}
+            "Authentication token required", context={"header": "Authorization"}
         )
-    
+
     # Simulate token verification
     if token == "expired":
         raise token_expired()
-    
+
     if token != "valid":
         raise AuthenticationError(
-            "Invalid authentication token",
-            context={"token_prefix": token[:10]}
+            "Invalid authentication token", context={"token_prefix": token[:10]}
         )
-    
+
     return {"user_id": 1, "role": "user"}
 
 
@@ -141,21 +137,15 @@ def delete_order(order_id: int, user: dict):
     """Delete order - demonstrates authorization."""
     # Get order
     order = {"id": order_id, "user_id": 123, "status": "shipped"}
-    
+
     # Check if user owns the order
     if order["user_id"] != user["id"] and user["role"] != "admin":
-        raise access_denied(
-            resource="Order",
-            action="delete"
-        )
-    
+        raise access_denied(resource="Order", action="delete")
+
     # Business rule: can't delete shipped orders
     if order["status"] == "shipped":
-        raise operation_not_allowed(
-            "delete",
-            "Cannot delete shipped orders"
-        )
-    
+        raise operation_not_allowed("delete", "Cannot delete shipped orders")
+
     # Delete order...
     return {"message": "Order deleted"}
 
@@ -169,14 +159,13 @@ def cancel_order(order_id: int):
     """Cancel order - demonstrates business rule validation."""
     # Get order
     order = {"id": order_id, "status": "delivered"}
-    
+
     # Can only cancel pending or processing orders
     if order["status"] not in ["pending", "processing"]:
         raise invalid_state(
-            current_state=order["status"],
-            expected_state="pending or processing"
+            current_state=order["status"], expected_state="pending or processing"
         )
-    
+
     # Update order status...
     return {"message": "Order cancelled"}
 
@@ -184,22 +173,19 @@ def cancel_order(order_id: int):
 def process_refund(order_id: int, amount: float):
     """Process refund - demonstrates constraint validation."""
     order = {"id": order_id, "total": 100.0, "refunded": 20.0}
-    
+
     # Validate refund amount
     if amount <= 0:
-        raise constraint_violation(
-            "amount_positive",
-            "Refund amount must be positive"
-        )
-    
+        raise constraint_violation("amount_positive", "Refund amount must be positive")
+
     # Check if refund exceeds remaining amount
     remaining = order["total"] - order["refunded"]
     if amount > remaining:
         raise constraint_violation(
             "refund_exceeds_remaining",
-            f"Refund amount ({amount}) exceeds remaining amount ({remaining})"
+            f"Refund amount ({amount}) exceeds remaining amount ({remaining})",
         )
-    
+
     # Process refund...
     return {"message": "Refund processed"}
 
@@ -212,16 +198,16 @@ def process_refund(order_id: int, amount: float):
 def fastapi_router_example():
     """
     Example of how to use exceptions in FastAPI routers.
-    
+
     Note: This is pseudo-code showing the pattern.
     """
-    
+
     from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse
     from app.shared.exceptions import AppException
-    
+
     app = FastAPI()
-    
+
     # Global exception handler
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException):
@@ -237,14 +223,11 @@ def fastapi_router_example():
             "external_service": 502,
             "internal": 500,
         }
-        
+
         status_code = status_map.get(exc.category.value, 500)
-        
-        return JSONResponse(
-            status_code=status_code,
-            content=exc.to_dict()
-        )
-    
+
+        return JSONResponse(status_code=status_code, content=exc.to_dict())
+
     # Router endpoint
     @app.get("/users/{user_id}")
     async def get_user(user_id: int):
@@ -252,7 +235,7 @@ def fastapi_router_example():
         # Just raise the exception - it will be caught and handled
         user = get_user_by_id(user_id)
         return user
-    
+
     @app.post("/users")
     async def create_user_endpoint(email: str, password: str):
         """Create user endpoint."""
@@ -267,48 +250,48 @@ def fastapi_router_example():
 
 class UserService:
     """User service demonstrating exception usage in service layer."""
-    
+
     def get(self, user_id: int):
         """Get user by ID."""
         user = None  # self.repository.find_by_id(user_id)
-        
+
         if not user:
             raise entity_not_found("User", user_id)
-        
+
         return user
-    
+
     def create(self, email: str, password: str):
         """Create new user."""
         # Validation
         if not email or not password:
             raise ValidationError(
                 "Email and password are required",
-                context={"email": bool(email), "password": bool(password)}
+                context={"email": bool(email), "password": bool(password)},
             )
-        
+
         # Check duplicate
         existing = None  # self.repository.find_by_email(email)
         if existing:
             raise duplicate_entry("User", "email", email)
-        
+
         # Create user...
         return {"id": 1, "email": email}
-    
+
     def update(self, user_id: int, **kwargs):
         """Update user."""
         user = self.get(user_id)
-        
+
         # Update fields...
         return user
-    
+
     def delete(self, user_id: int, current_user: dict):
         """Delete user."""
         user = self.get(user_id)
-        
+
         # Authorization check
         if user["id"] != current_user["id"] and current_user["role"] != "admin":
             raise access_denied(resource="User", action="delete")
-        
+
         # Delete user...
         return {"message": "User deleted"}
 
@@ -320,7 +303,7 @@ class UserService:
 
 class PaymentProcessingError(BusinessRuleError):
     """Custom exception for payment processing."""
-    
+
     def __init__(
         self,
         message: str = "Payment processing failed",
@@ -332,11 +315,8 @@ class PaymentProcessingError(BusinessRuleError):
             context["payment_id"] = payment_id
         if reason:
             context["reason"] = reason
-        
-        super().__init__(
-            message=message,
-            context=context if context else None
-        )
+
+        super().__init__(message=message, context=context if context else None)
 
 
 def process_payment(payment_id: str, amount: float):
@@ -345,19 +325,17 @@ def process_payment(payment_id: str, amount: float):
         raise PaymentProcessingError(
             "Invalid payment amount",
             payment_id=payment_id,
-            reason="Amount must be positive"
+            reason="Amount must be positive",
         )
-    
+
     # Simulate payment processing
     success = False
-    
+
     if not success:
         raise PaymentProcessingError(
-            "Payment gateway error",
-            payment_id=payment_id,
-            reason="Gateway timeout"
+            "Payment gateway error", payment_id=payment_id, reason="Gateway timeout"
         )
-    
+
     return {"payment_id": payment_id, "status": "completed"}
 
 
@@ -369,7 +347,7 @@ def process_payment(payment_id: str, amount: float):
 if __name__ == "__main__":
     print("Exception Module Examples")
     print("=" * 50)
-    
+
     # Example 1: NotFoundError
     print("\n1. NotFoundError example:")
     try:
@@ -377,7 +355,7 @@ if __name__ == "__main__":
     except NotFoundError as e:
         print(f"   {e}")
         print(f"   Context: {e.context}")
-    
+
     # Example 2: ValidationError
     print("\n2. ValidationError example:")
     try:
@@ -385,7 +363,7 @@ if __name__ == "__main__":
     except ValidationError as e:
         print(f"   {e}")
         print(f"   Error code: {e.error_code.value}")
-    
+
     # Example 3: DatabaseError
     print("\n3. DatabaseError example:")
     try:
@@ -393,7 +371,7 @@ if __name__ == "__main__":
     except DatabaseError as e:
         print(f"   {e}")
         print(f"   Original error: {e.original_exception}")
-    
+
     # Example 4: AuthorizationError
     print("\n4. AuthorizationError example:")
     try:
@@ -402,7 +380,7 @@ if __name__ == "__main__":
     except AuthorizationError as e:
         print(f"   {e}")
         print(f"   Context: {e.context}")
-    
+
     # Example 5: BusinessRuleError
     print("\n5. BusinessRuleError example:")
     try:
@@ -410,6 +388,6 @@ if __name__ == "__main__":
     except BusinessRuleError as e:
         print(f"   {e}")
         print(f"   Context: {e.context}")
-    
+
     print("\n" + "=" * 50)
     print("All examples completed successfully!")

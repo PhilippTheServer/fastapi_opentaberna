@@ -5,14 +5,14 @@ Following Interface Segregation Principle - focused, minimal interfaces.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from .enums import ErrorCategory, ErrorCode
 
 
 class IAppException(ABC):
     """
     Interface for application exceptions.
-    
+
     Defines the contract that all custom exceptions must implement.
     """
 
@@ -40,7 +40,7 @@ class IAppException(ABC):
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert exception to dictionary for logging and API responses.
-        
+
         Returns:
             Dictionary with error details
         """
@@ -50,7 +50,7 @@ class IAppException(ABC):
     def should_log(self) -> bool:
         """
         Determine if this exception should be automatically logged.
-        
+
         Returns:
             True if exception should be logged, False otherwise
         """
@@ -64,10 +64,10 @@ class IExceptionHandler(ABC):
     def handle(self, exception: IAppException) -> Any:
         """
         Handle an application exception.
-        
+
         Args:
             exception: The exception to handle
-            
+
         Returns:
             Handler-specific result (e.g., HTTP response)
         """
@@ -77,10 +77,10 @@ class IExceptionHandler(ABC):
     def can_handle(self, exception: Exception) -> bool:
         """
         Check if this handler can handle the given exception.
-        
+
         Args:
             exception: The exception to check
-            
+
         Returns:
             True if handler can handle this exception
         """

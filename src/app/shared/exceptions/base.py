@@ -12,10 +12,10 @@ from .enums import ErrorCategory, ErrorCode
 class AppException(Exception, IAppException):
     """
     Base class for all application exceptions.
-    
+
     Implements automatic logging and provides a rich context for error handling.
     All custom exceptions should inherit from this class.
-    
+
     Attributes:
         message: Human-readable error message
         error_code: Specific error code for identification
@@ -36,7 +36,7 @@ class AppException(Exception, IAppException):
     ):
         """
         Initialize application exception.
-        
+
         Args:
             message: Human-readable error message
             error_code: Specific error code
@@ -80,7 +80,7 @@ class AppException(Exception, IAppException):
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert exception to dictionary for logging and API responses.
-        
+
         Returns:
             Dictionary with error details
         """
@@ -108,7 +108,7 @@ class AppException(Exception, IAppException):
     def _log_exception(self) -> None:
         """
         Log the exception automatically using the logger module.
-        
+
         Uses appropriate log level based on error category:
         - Client errors (4xx): WARNING
         - Server errors (5xx): ERROR
@@ -148,6 +148,7 @@ class AppException(Exception, IAppException):
             # Fallback: Don't let logging failure break the application
             # Just print to stderr
             import sys
+
             print(
                 f"Failed to log exception: {e}. Original error: {self.message}",
                 file=sys.stderr,

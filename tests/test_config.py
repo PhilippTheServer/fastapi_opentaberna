@@ -4,7 +4,6 @@ Configuration Module Tests
 Tests for environment-based configuration with secrets support.
 """
 
-
 import pytest
 
 from app.shared.config import Environment, Settings, get_settings

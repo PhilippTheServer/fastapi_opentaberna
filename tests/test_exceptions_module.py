@@ -4,8 +4,7 @@ Tests for the Exception Module.
 Tests all exception classes, helper functions, and automatic logging.
 """
 
-import pytest
-from unittest.mock import Mock, patch, call
+from unittest.mock import Mock, patch
 from app.shared.exceptions import (
     # Exception classes
     NotFoundError,
@@ -126,7 +125,7 @@ class TestAppException:
         mock_logger = Mock()
         mock_get_logger.return_value = mock_logger
 
-        exc = AppException(
+        AppException(
             message="Server error",
             error_code=ErrorCode.INTERNAL_ERROR,
             category=ErrorCategory.INTERNAL,
@@ -145,7 +144,7 @@ class TestAppException:
         mock_logger = Mock()
         mock_get_logger.return_value = mock_logger
 
-        exc = AppException(
+        AppException(
             message="Client error",
             error_code=ErrorCode.INVALID_INPUT,
             category=ErrorCategory.VALIDATION,
@@ -162,7 +161,7 @@ class TestAppException:
         mock_logger = Mock()
         mock_get_logger.return_value = mock_logger
 
-        exc = AppException(
+        AppException(
             message="Test error",
             error_code=ErrorCode.INTERNAL_ERROR,
             category=ErrorCategory.INTERNAL,
@@ -591,7 +590,7 @@ class TestErrorCategory:
         assert ErrorCategory.AUTHENTICATION.is_client_error()
         assert ErrorCategory.AUTHORIZATION.is_client_error()
         assert ErrorCategory.BUSINESS_RULE.is_client_error()
-        
+
         assert not ErrorCategory.DATABASE.is_client_error()
         assert not ErrorCategory.INTERNAL.is_client_error()
 
@@ -600,6 +599,6 @@ class TestErrorCategory:
         assert ErrorCategory.DATABASE.is_server_error()
         assert ErrorCategory.EXTERNAL_SERVICE.is_server_error()
         assert ErrorCategory.INTERNAL.is_server_error()
-        
+
         assert not ErrorCategory.NOT_FOUND.is_server_error()
         assert not ErrorCategory.VALIDATION.is_server_error()
