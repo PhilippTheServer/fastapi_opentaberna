@@ -68,8 +68,30 @@ class Settings(BaseSettings):
     database_pool_timeout: int = Field(
         default=30, description="Database pool timeout in seconds"
     )
+    database_pool_recycle: int = Field(
+        default=3600, description="Connection recycle time in seconds"
+    )
+    database_pool_pre_ping: bool = Field(
+        default=True, description="Test connections before using them"
+    )
     database_echo: bool = Field(
         default=False, description="Echo SQL queries (for debugging)"
+    )
+    database_echo_pool: bool = Field(
+        default=False, description="Echo connection pool events"
+    )
+    database_statement_timeout: int = Field(
+        default=60000, description="Statement timeout in milliseconds"
+    )
+    database_command_timeout: int = Field(
+        default=60, description="Command timeout in seconds"
+    )
+    database_server_settings: dict[str, str] = Field(
+        default_factory=lambda: {
+            "application_name": "OpenTaberna API",
+            "jit": "off",  # JIT can cause issues with some queries
+        },
+        description="PostgreSQL server settings",
     )
 
     # Redis
