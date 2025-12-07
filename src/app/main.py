@@ -1,16 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-import logging
 
-
-
-app = FastAPI(title="Dev API")
-
-
-# Configure logging once at the entry point
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+app = FastAPI(title="OpenTaberna API")
 
 
 origins = ["*"]  # Consider restricting this in a production environment
